@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -25,7 +26,7 @@ func TestFindUsers(t *testing.T) {
 		IsError bool
 	}
 	cases := []TestCase{
-		TestCase{
+		{
 			request: SearchRequest{
 				Query:      "dolore",
 				OrderField: "Id",
@@ -39,6 +40,75 @@ func TestFindUsers(t *testing.T) {
 			},
 			IsError: false,
 		},
+		{
+			request: SearchRequest{
+				Query:      "dolore",
+				OrderField: "Name",
+				OrderBy:    -1,
+				Limit:      10,
+				Offset:     0,
+			},
+			Result: SearchResponse{
+				Users:    []User{},
+				NextPage: false,
+			},
+			IsError: false,
+		},
+		{
+			request: SearchRequest{
+				Query:      "Dickson Silva",
+				OrderField: "",
+				OrderBy:    0,
+				Limit:      10,
+				Offset:     0,
+			},
+			Result: SearchResponse{
+				Users:    []User{},
+				NextPage: false,
+			},
+			IsError: false,
+		},
+		{
+			request: SearchRequest{
+				Query:      "ipsum",
+				OrderField: "Age",
+				OrderBy:    0,
+				Limit:      10,
+				Offset:     0,
+			},
+			Result: SearchResponse{
+				Users:    []User{},
+				NextPage: false,
+			},
+			IsError: false,
+		},
+		{ // err limit < 0
+			request: SearchRequest{
+				Query:      "ТоЧегоНетВДанных",
+				OrderField: "Id",
+				OrderBy:    1,
+				Limit:      -1,
+				Offset:     0,
+			},
+		},
+		{ // limit > 25
+			request: SearchRequest{
+				Query:      "ТоЧегоНетВДанных",
+				OrderField: "Id",
+				OrderBy:    1,
+				Limit:      999,
+				Offset:     0,
+			},
+		},
+		{ // err Offset < 0
+			request: SearchRequest{
+				Query:      "ТоЧегоНетВДанных",
+				OrderField: "Id",
+				OrderBy:    1,
+				Limit:      10,
+				Offset:     -1,
+			},
+		},
 	}
 
 	// Без авторизации
@@ -50,23 +120,58 @@ func TestFindUsers(t *testing.T) {
 			Limit:      10,
 			Offset:     0,
 		})
-	if err != fmt.Errorf("Bad AccessToken") {
-		t.Errorf("[%d] expected error, got nil", -1)
+
+	if err == nil {
+		t.Errorf("[%d] expected error, got nil", 0)
+	} else if errors.Is(err, fmt.Errorf("Bad AccessToken")) {
+		t.Errorf("[%d] Ожидалась не эта ошибка: %#v", 0, err)
+	}
+	// с ошибкой
+	type doError struct {
+		Client   SearchClient
+		resError error
+	}
+	errorClients := []doError{
+		{
+			SearchClient{
+				AccessToken: "Уронись error timeout",
+				URL:         ts.URL,
+			},
+			fmt.Errorf(""),
+		},
+		{
+			SearchClient{
+				AccessToken: "Уронись error other",
+				URL:         ts.URL,
+			},
+			fmt.Errorf(""),
+		},
+	}
+	for _, errorClient := range errorClients {
+		errorClient.Client.FindUsers(
+			SearchRequest{
+				Query:      "ТоЧегоНетВДанных",
+				OrderField: "Id",
+				OrderBy:    1,
+				Limit:      10,
+				Offset:     0,
+			})
 	}
 
 	for caseNum, item := range cases {
 		_, err := client.FindUsers(item.request)
 
 		if err != nil && !item.IsError {
-			t.Errorf("[%d] unexpected error: %#v", caseNum, err)
+			t.Errorf("[%d] unexpected error: %#v", caseNum+1, err)
 		}
 		if err == nil && item.IsError {
-			t.Errorf("[%d] expected error, got nil", caseNum)
+			t.Errorf("[%d] expected error, got nil", caseNum+1)
 		}
 		// if !reflect.DeepEqual(item.Result, result) {
 		// 	t.Errorf("[%d] wrong result, expected %#v, got %#v", caseNum, item.Result, result)
 		// }
 	}
+
 	ts.Close()
 }
 

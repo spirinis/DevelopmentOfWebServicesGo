@@ -37,7 +37,6 @@ func SearchServer(w http.ResponseWriter, r *http.Request) {
 		name string
 	}
 	fields := possibleOrderFields{id: `Id`, age: `Age`, name: `Name`}
-	//http://127.0.0.1:53784/?query=cillum&order_field=Id&order_by=-1&limit=10&offset=0
 
 	// что искать. Ищем по полям записи `Name` и `About` просто подстроку, без регулярок.
 	// `Name` - это first_name + last_name из xml (вам надо руками пройтись в цикле по записям и сделать такой,
@@ -86,7 +85,6 @@ func SearchServer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	//data := make([]User, 0, currentNumberOfRecords)
 	var data xmlData
 	err = xml.Unmarshal(file, &data)
 	if err != nil {
@@ -95,15 +93,8 @@ func SearchServer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var dataMap map[string]User
-	switch query {
-	case fields.id, fields.age:
-		dataMap = make(map[string]User)
-		//dataMap = dataMap.(map[int]User)
-	default:
-		dataMap = make(map[string]User)
-		//dataMap = dataMap.(map[string]User)
-	}
+	dataMap := make(map[string]User)
+
 	for _, user := range data.Items {
 		user.Name = user.First_name + " " + user.Last_name
 		if strings.Contains(user.Name, query) || strings.Contains(user.About, query) {
@@ -119,12 +110,6 @@ func SearchServer(w http.ResponseWriter, r *http.Request) {
 	}
 	keys := make([]string, 0, len(dataMap))
 	for k := range dataMap {
-		// switch k := k.(type) {
-		// case int:
-		// 	keys = append(keys, strconv.Itoa(k))
-		// case string:
-		// 	keys = append(keys, k)
-		// }
 		keys = append(keys, k)
 
 	}
@@ -133,20 +118,28 @@ func SearchServer(w http.ResponseWriter, r *http.Request) {
 
 	//sort.Strings(keys)
 	if order_by != OrderByAsIs {
-		// slices.SortFunc()
-		// slices.SortStableFunc(keys, func(a, b string) int {
-		// 	switch order_by {
-		// 	case OrderByAsc:
-		// 		return keys[i] <= keys[j] // Сортировка в прямом порядке
-		// 	case OrderByDesc:
-		// 		return keys[i] >= keys[j] // Сортировка в обратном порядке
-		// }
 		sort.Slice(keys, func(i, j int) bool {
 			switch order_by {
-			case OrderByDesc:
-				return keys[i] <= keys[j] // Сортировка в обратном порядке
-			default: // OrderByAsc
-				return keys[i] >= keys[j] // Сортировка в прямом порядке
+			case OrderByDesc: // Сортировка в обратном порядке
+				switch order_field {
+				// если сортировка по int
+				case fields.age, fields.id:
+					a, _ := strconv.Atoi(keys[i])
+					b, _ := strconv.Atoi(keys[j])
+					return a < b
+				default: // если сортировка по string
+					return keys[i] < keys[j]
+				}
+			default: // OrderByAsc Сортировка в прямом порядке
+				switch order_field {
+				// если сортировка по int
+				case fields.age, fields.id:
+					a, _ := strconv.Atoi(keys[i])
+					b, _ := strconv.Atoi(keys[j])
+					return a > b
+				default: // если сортировка по string
+					return keys[i] > keys[j]
+				}
 			}
 		})
 	}
@@ -168,7 +161,7 @@ func SearchServer(w http.ResponseWriter, r *http.Request) {
 		outputData = outputData[offset : offset+limit]
 	}
 	for _, user := range outputData {
-		fmt.Println(user.Id, user.Name, user.Gender)
+		fmt.Println(user.Id, user.Name, user.Age)
 	}
 	fmt.Println()
 	// ответ в виде JSON
@@ -183,6 +176,8 @@ func SearchServer(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
+	// для ручного тестирования
+	//http://127.0.0.1:?????/?query=cillum&order_field=Id&order_by=-1&limit=10&offset=0
 	ts := httptest.NewServer(http.HandlerFunc(SearchServer))
 	fmt.Println("start", ts.URL)
 	fmt.Scanln()
